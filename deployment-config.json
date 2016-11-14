@@ -1,0 +1,9 @@
+{
+    "type": "sftp",
+    "host": "192.168.8.2",
+    "username": "machinekit",
+    "password": "machinekit",
+    "port": 22,
+    "remotePath": "/home/machinekit/openvlc",
+    "uploadOnSave": true
+}
