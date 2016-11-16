@@ -1,6 +1,6 @@
 {
     "type": "sftp",
-    "host": "192.168.8.2",
+    "host": "192.168.7.2",
     "username": "machinekit",
     "password": "machinekit",
     "port": 22,

@@ -1,20 +1,20 @@
 /*
- Copyright (c) 2014, IMDEA NETWORKS Institute
+   Copyright (c) 2014, IMDEA NETWORKS Institute
 
- This file is part of the OpenVLC's source codes.
+   This file is part of the OpenVLC's source codes.
 
- OpenVLC's source codes are free: you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation, either version 3 of the License, or
- (at your option) any later version.
+   OpenVLC's source codes are free: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published by
+   the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
 
- OpenVLC's source codes are distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+   OpenVLC's source codes are distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+   GNU General Public License for more details.
 
- You should have received a copy of the GNU General Public License
- along with the source codes of OpenVLC.  If not, see <http://www.gnu.org/licenses/>.
+   You should have received a copy of the GNU General Public License
+   along with the source codes of OpenVLC.  If not, see <http://www.gnu.org/licenses/>.
  */
 
 #ifndef _LINUX_IF_VLC_H
@@ -81,7 +81,7 @@
 //#define MAX_PAYLOAD_LEN 1500
 #define ECC_LEN 0  //
 #define FRAME_LEN_WO_PAYLOAD \
-    (PREAMBLE_LEN+SFD_LEN+MAC_HDR_LEN+ECC_LEN)
+        (PREAMBLE_LEN+SFD_LEN+MAC_HDR_LEN+ECC_LEN)
 
 #define PREAMBLE_LEN_IN_BITS (8*PREAMBLE_LEN)
 
@@ -90,10 +90,10 @@
 
 // This is an vlc frame header.
 struct vlchdr {
-	unsigned char	h_dest[MAC_ADDR_LEN];	/* destination eth addr	*/
-	unsigned char	h_source[MAC_ADDR_LEN];	/* source ether addr	*/
-	__be16		h_proto;		/* packet type ID field	*/
+        unsigned char h_dest[MAC_ADDR_LEN]; /* destination eth addr	*/
+        unsigned char h_source[MAC_ADDR_LEN]; /* source ether addr	*/
+        __be16 h_proto; /* packet type ID field	*/
 } __attribute__((packed));
 
 
-#endif	/* _LINUX_IF_VLC_H */
+#endif  /* _LINUX_IF_VLC_H */
