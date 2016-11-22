@@ -34,6 +34,9 @@ all::
 modules:
 	@echo "$(CFLAGS)"
 
+load:
+	./load_driver_server_lp_pd.sh
+
 clean::
 	find . -type f | xargs -n 5 touch
 	$(RM) $(CLEANMOD) *.o *.ko *.mod.c Module*.symvers Module.markers modules.order

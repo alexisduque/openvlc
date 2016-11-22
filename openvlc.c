@@ -98,7 +98,9 @@ static struct rs_control *rs_decoder;
 static rtdm_timer_t phy_timer;
 static _Bool f_adjust_slot = 0;
 
-#define MAX_RETRANSMISSION  2 // At most tx 4 times
+#define MAX_RETRANSMISSION  4 // At most tx 4 times
+#define MAX_TX_BROADCAST  100
+
 static int cnt_retransmission = 0;
 static _Bool f_re_tx = 0;
 
@@ -925,7 +927,7 @@ static void construct_dummy_frame(char *buffer, int buffer_len, int payload_len)
     // Payload
     for (i = 0; i < payload_len; i++)   // Data
     {
-        buffer[PREAMBLE_LEN + i] = (char)(0xA8);
+        buffer[PREAMBLE_LEN + i] = (char)(0xAA);
     }
 
     if (CRC_LEN > 0)
@@ -949,10 +951,17 @@ static void generate_dummy_DATA_frame(void)
     encoded_len = tx_len + 2 * MAC_ADDR_LEN + PROTOCOL_LEN;
 
     // Calculate the number of blocks
-    num_of_blocks = 1;
+    if (encoded_len % block_size)
+    {
+        num_of_blocks = encoded_len / block_size + 1;
+    }
+    else
+    {
+        num_of_blocks = encoded_len / block_size;
+    }
 
     //printk("num_of_blocks: %d\n", num_of_blocks);
-    data_buffer_byte_len = FRAME_LEN_WO_PAYLOAD + tx_len + ECC_LEN * (num_of_blocks);
+    data_buffer_byte_len = FRAME_LEN_WO_PAYLOAD + tx_len + ECC_LEN * (num_of_blocks - 1);
     //data_buffer_byte = kmalloc(data_buffer_byte_len, GFP_KERNEL);
     memset(data_buffer_byte, 0, sizeof(unsigned char) * data_buffer_byte_len);
     data_buffer_symbol_len = (data_buffer_byte_len - PREAMBLE_LEN - TAIL_LEN) * 8 * 2
@@ -1097,15 +1106,25 @@ start:
                     return 0;
                 }
 
-                goto start;
+                if (broadcast && !f_re_tx)
+                {
+                    // Send IDLE pattern
+                    generate_dummy_DATA_frame();
+                }
+                else
+                {
+                    goto start;
+                }
             }
-
-            tx_pkt = vlc_dequeue_pkt(vlc_devs);
-            printk("Dequeue a packet!\n");
-            /// Transmit the packet
-            generate_DATA_frame(tx_pkt);             // Generate MAC frame
+            else
+            {
+                tx_pkt = vlc_dequeue_pkt(vlc_devs);
+                printk("Dequeue a packet!\n");
+                /// Transmit the packet
+                generate_DATA_frame(tx_pkt);             // Generate MAC frame
+            }
         }
-        else if (mac_or_app == MAC)
+        else if (mac_or_app == MAC && !f_re_tx)
         {
             //if (data_buffer_symbol)
             //kfree(data_buffer_symbol);
@@ -1743,21 +1762,13 @@ void phy_timer_handler(rtdm_timer_t *timer)
 
             if (++tx_data_curr_index >= data_buffer_symbol_len && f_ready_to_tx)
             {
-                if (!broadcast)
-                {
-                    f_wait_for_ack = true;
-                }
-                else
-                {
-                    f_wait_for_ack = false;
-                }
-
+                f_wait_for_ack = true;
                 index_ack_timeout = 0;
                 f_received_len = false;
                 writel(1 << bit_led_anode, gpio2 + CLEAR_OFFSET);
                 //if (show_msg)
                 //{
-                //if (hpl == 1) {
+                //if (hpl == 1) {0
                 //printk("Sent a frame. TX: high-power LED.\n");
                 //} else {
                 //printk("Sent a frame. TX: low-power LED.\n");
@@ -1802,6 +1813,7 @@ void phy_timer_handler(rtdm_timer_t *timer)
                     switch_led_to_rx();
                 }
 
+                printk("Switch PHY state to RX.\n");
                 phy_state = RX;                 // Switch to RX mode
             }
         }         // End: the node is transmitting an ACK frame
@@ -1817,12 +1829,12 @@ void phy_timer_handler(rtdm_timer_t *timer)
         if (f_wait_for_ack && (index_ack_timeout++) > ACK_TIMEOUT)
         {
             f_wait_for_ack = false;
-            if (cnt_retransmission < MAX_RETRANSMISSION)
+            if ( cnt_retransmission < MAX_RETRANSMISSION || (broadcast && cnt_retransmission < MAX_TX_BROADCAST) )
             {
                 ++cnt_retransmission;
                 f_re_tx = true;                 // Retransmit
                 f_rx_one_preamble = 0;
-                //printk("ACK timeout. Retransmit %d.\n\n", cnt_retransmission);
+                printk("ACK timeout. Retransmit %d.\n\n", cnt_retransmission);
             }
             else                 // Drop the current data frame or assume it is received
             {
