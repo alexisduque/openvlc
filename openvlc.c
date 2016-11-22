@@ -691,7 +691,7 @@ static void OOK_with_Manchester_RLL(char *buffer_before_coding,
     // Convert the preamble -- OOK w/o Manchester RLL code
     for (byte_index = 0; byte_index < PREAMBLE_LEN; byte_index++)
     {
-        mask = 0x80;
+        mask = 0x08;
         curr_byte = buffer_before_coding[byte_index] & 0xff;
         while (mask)
         {
@@ -725,7 +725,7 @@ static void OOK_with_Manchester_RLL(char *buffer_before_coding,
     // Convert the preamble -- OOK w/o Manchester RLL code
     for (byte_index = len_before_coding - 1; byte_index < len_before_coding; byte_index++)
     {
-        mask = 0x80;
+        mask = 0x08;
         curr_byte = buffer_before_coding[byte_index] & 0xff;
         while (mask)
         {
@@ -770,38 +770,51 @@ static void construct_ack(char *buffer, int buffer_len)
 static void construct_frame_header(char *buffer, int buffer_len, int payload_len)
 {
     int i;
-    //unsigned short crc;
+    unsigned short crc;
 
     for (i = 0; i < PREAMBLE_LEN; i++)
     {
-        buffer[i] = 0xF7;         // Preamble
+        buffer[i] = PREAMBLE_VAL;         // Preamble
     }
 
-    // SFD
-    /*
-       buffer[PREAMBLE_LEN] = 0xa3;
-       // Length of payload
-       buffer[PREAMBLE_LEN+1] = (unsigned char) ((payload_len>>8) & 0xff);
-       buffer[PREAMBLE_LEN+2] = (unsigned char) (payload_len & 0xff);
-       // Destination address
-       buffer[PREAMBLE_LEN+3] = (unsigned char) ((dst_id>>8) & 0xff);
-       buffer[PREAMBLE_LEN+4] = (unsigned char) (dst_id & 0xff);
-       // Source address
-       buffer[PREAMBLE_LEN+5] = (unsigned char) ((self_id>>8) & 0xff);
-       buffer[PREAMBLE_LEN+6] = (unsigned char) (self_id & 0xff);
-       // CRC
-       //crc = crc16(buffer+PREAMBLE_LEN+SFD_LEN, MAC_HDR_LEN+payload_len);
-       //buffer[buffer_len-2] = (char) ((0xff00&crc)>>8); // CRC byte 1
-       //buffer[buffer_len-1] = (char) ((0x00ff&crc)); // CRC byte 2
-     */
-    buffer[buffer_len - 1] = 0x7F;   // CRC byte 2
+    if (SFD_LEN > 0)
+    {
+        // SFD
+        buffer[PREAMBLE_LEN] = 0xa3;
+        // Length of payload
+        buffer[PREAMBLE_LEN + 1] = (unsigned char)( (payload_len >> 8) & 0xff );
+        buffer[PREAMBLE_LEN + 2] = (unsigned char)(payload_len & 0xff);
+        // Destination address
+        buffer[PREAMBLE_LEN + 3] = (unsigned char)( (dst_id >> 8) & 0xff );
+        buffer[PREAMBLE_LEN + 4] = (unsigned char)(dst_id & 0xff);
+        // Source address
+        buffer[PREAMBLE_LEN + 5] = (unsigned char)( (self_id >> 8) & 0xff );
+        buffer[PREAMBLE_LEN + 6] = (unsigned char)(self_id & 0xff);
+        // Protocol
+        buffer[PREAMBLE_LEN + 7] = 0x08;
+        buffer[PREAMBLE_LEN + 8] = 0x06;
+    }
+
+    if (CRC_LEN > 0)
+    {
+        // CRC
+        crc = crc16(buffer + PREAMBLE_LEN + SFD_LEN, MAC_HDR_LEN + payload_len);
+        buffer[buffer_len - CRC_LEN - 2] = (char)( (0xff00 & crc) >> 8 );  // CRC byte 1
+        buffer[buffer_len - CRC_LEN - 1] = (char)( (0x00ff & crc) );  // CRC byte 2
+    }
+
+    if (TAIL_LEN > 0)
+    {
+        buffer[buffer_len - 1] = PREAMBLE_VAL;
+    }
 }
 
 
 static void generate_DATA_frame(struct vlc_packet *pkt)
 {
     int i, payload_len, index_block, encoded_len, num_of_blocks = 0;
-    payload_len = pkt->datalen - (MAC_HDR_LEN - OCTET_LEN);
+    //payload_len = pkt->datalen - (MAC_HDR_LEN - OCTET_LEN);
+    payload_len = tx_len;
     encoded_len = payload_len + 2 * MAC_ADDR_LEN + PROTOCOL_LEN;
     // Calculate the number of blocks
     if (encoded_len % block_size)
@@ -816,8 +829,8 @@ static void generate_DATA_frame(struct vlc_packet *pkt)
     data_buffer_byte_len = FRAME_LEN_WO_PAYLOAD + payload_len + ECC_LEN * (num_of_blocks - 1);
     //data_buffer_byte = kmalloc(data_buffer_byte_len, GFP_KERNEL);
     memset(data_buffer_byte, 0, sizeof(unsigned char) * data_buffer_byte_len);
-    data_buffer_symbol_len = (data_buffer_byte_len - PREAMBLE_LEN) * 8 * 2
-                             + PREAMBLE_LEN * 8 + 1;   // Send a BIT more, why? -- Avoid phy error
+    data_buffer_symbol_len = (data_buffer_byte_len - PREAMBLE_LEN - TAIL_LEN) * 8 * 2
+                             + PREAMBLE_LEN_IN_BITS + TAIL_LEN_IN_BITS + 1; // Send a BIT more, why? -- Avoid phy error
     //data_buffer_symbol =
     //kmalloc((data_buffer_symbol_len)*sizeof(_Bool), GFP_KERNEL);
     if (data_buffer_byte == NULL || data_buffer_symbol == NULL)
@@ -828,27 +841,37 @@ static void generate_DATA_frame(struct vlc_packet *pkt)
 
     // Construct a new data frame
     memcpy(data_buffer_byte + PREAMBLE_LEN + SFD_LEN + OCTET_LEN, pkt->data,
-           pkt->datalen);     // Copy the payload
+           payload_len);  // Copy the payload
     vlc_release_buffer(pkt);     // Return the buffer to the pool
     construct_frame_header(data_buffer_byte, data_buffer_byte_len, payload_len);
-    /*
-       /// Encode the blocks of a frame
-       for (index_block = 0; index_block < num_of_blocks; index_block++) {
-       for (i = 0; i < ECC_LEN; i++)
-        par[i] = 0;
-       if (index_block < num_of_blocks-1) {
-        encode_rs8(rs_decoder,
-                data_buffer_byte+PREAMBLE_LEN+SFD_LEN+OCTET_LEN+index_block*block_size,
-                block_size, par, 0);
-       } else {
-        encode_rs8(rs_decoder,
-                data_buffer_byte+PREAMBLE_LEN+SFD_LEN+OCTET_LEN+index_block*block_size,
-                encoded_len%block_size, par, 0);
-       }
-       for (i = 0; i < ECC_LEN; i++)
-        data_buffer_byte[FRAME_LEN_WO_PAYLOAD+payload_len+(index_block-1)*ECC_LEN+i] = par[i];
-       }
-     */
+
+    /// Encode the blocks of a frame
+    // for (index_block = 0; index_block < num_of_blocks; index_block++)
+    // {
+    //     for (i = 0; i < ECC_LEN; i++)
+    //     {
+    //         par[i] = 0;
+    //     }
+    //
+    //     if (index_block < num_of_blocks - 1)
+    //     {
+    //         encode_rs8(rs_decoder,
+    //                    data_buffer_byte + PREAMBLE_LEN + SFD_LEN + OCTET_LEN + index_block * block_size,
+    //                    block_size, par, 0);
+    //     }
+    //     else
+    //     {
+    //         encode_rs8(rs_decoder,
+    //                    data_buffer_byte + PREAMBLE_LEN + SFD_LEN + OCTET_LEN + index_block * block_size,
+    //                    encoded_len % block_size, par, 0);
+    //     }
+    //
+    //     for (i = 0; i < ECC_LEN; i++)
+    //     {
+    //         data_buffer_byte[FRAME_LEN_WO_PAYLOAD + payload_len + (index_block - 1) * ECC_LEN + i] = par[i];
+    //     }
+    // }
+
     /////******************************
     //for (i = 0; i < ECC_LEN; i++)
     //par[i] = 0;
@@ -867,47 +890,56 @@ static void generate_DATA_frame(struct vlc_packet *pkt)
     tx_data_curr_index = data_buffer_symbol_len;
     //print_uncoded_frame();
     //if (data_buffer_byte) kfree(data_buffer_byte);
-//    print_coded_frame();
+    //    print_coded_frame();
 }
 
 
 static void construct_dummy_frame(char *buffer, int buffer_len, int payload_len)
 {
     int i;
-    //unsigned short crc;
+    unsigned short crc;
 
     for (i = 0; i < PREAMBLE_LEN; i++)
     {
-        buffer[i] = 0xF7;         // Preamble
+        buffer[i] = PREAMBLE_VAL;         // Preamble
     }
 
-    /*
-       // SFD
-       // buffer[PREAMBLE_LEN] = 0xa3;
-       // Length of payload
-       buffer[PREAMBLE_LEN+1] = (unsigned char) ((payload_len>>8) & 0xff);
-       buffer[PREAMBLE_LEN+2] = (unsigned char) (payload_len & 0xff);
-       // Destination address
-       buffer[PREAMBLE_LEN+3] = (unsigned char) ((dst_id>>8) & 0xff);
-       buffer[PREAMBLE_LEN+4] = (unsigned char) (dst_id & 0xff);
-       // Source address
-       buffer[PREAMBLE_LEN+5] = (unsigned char) ((self_id>>8) & 0xff);
-       buffer[PREAMBLE_LEN+6] = (unsigned char) (self_id & 0xff);
-       // Protocol
-       buffer[PREAMBLE_LEN+7] = 0x08;
-       buffer[PREAMBLE_LEN+8] = 0x06;
-     */
+    if (SFD_LEN > 0)
+    {
+        // SFD
+        buffer[PREAMBLE_LEN] = 0xa3;
+        // Length of payload
+        buffer[PREAMBLE_LEN + 1] = (unsigned char)( (payload_len >> 8) & 0xff );
+        buffer[PREAMBLE_LEN + 2] = (unsigned char)(payload_len & 0xff);
+        // Destination address
+        buffer[PREAMBLE_LEN + 3] = (unsigned char)( (dst_id >> 8) & 0xff );
+        buffer[PREAMBLE_LEN + 4] = (unsigned char)(dst_id & 0xff);
+        // Source address
+        buffer[PREAMBLE_LEN + 5] = (unsigned char)( (self_id >> 8) & 0xff );
+        buffer[PREAMBLE_LEN + 6] = (unsigned char)(self_id & 0xff);
+        // Protocol
+        buffer[PREAMBLE_LEN + 7] = 0x08;
+        buffer[PREAMBLE_LEN + 8] = 0x06;
+    }
+
     // Payload
     for (i = 0; i < payload_len; i++)   // Data
     {
-        buffer[PREAMBLE_LEN + i] = (char)(0x99 & 0xff);
+        buffer[PREAMBLE_LEN + i] = (char)(0xA8);
     }
 
-    // CRC
-    //crc = crc16(buffer+PREAMBLE_LEN+SFD_LEN, MAC_HDR_LEN+payload_len);
-    //buffer[buffer_len-2] = (char) ((0xff00&crc)>>8); // CRC byte 1
-    //buffer[buffer_len-1] = (char) ((0x00ff&crc)); // CRC byte 2
-    buffer[buffer_len - 1] = 0x7F;   // CRC byte 2
+    if (CRC_LEN > 0)
+    {
+        // CRC
+        crc = crc16(buffer + PREAMBLE_LEN + SFD_LEN, MAC_HDR_LEN + payload_len);
+        buffer[buffer_len - CRC_LEN - 2] = (char)( (0xff00 & crc) >> 8 ); // CRC byte 1
+        buffer[buffer_len - CRC_LEN - 1] = (char)( (0x00ff & crc) ); // CRC byte 2
+    }
+
+    if (TAIL_LEN > 0)
+    {
+        buffer[buffer_len - 1] = PREAMBLE_VAL;   // CRC byte 2
+    }
 }
 
 
@@ -915,22 +947,16 @@ static void generate_dummy_DATA_frame(void)
 {
     int i, index_block, encoded_len, num_of_blocks = 0;
     encoded_len = tx_len + 2 * MAC_ADDR_LEN + PROTOCOL_LEN;
+
     // Calculate the number of blocks
-    if (encoded_len % block_size)
-    {
-        num_of_blocks = encoded_len / block_size + 1;
-    }
-    else
-    {
-        num_of_blocks = encoded_len / block_size;
-    }
+    num_of_blocks = 1;
 
     //printk("num_of_blocks: %d\n", num_of_blocks);
-    data_buffer_byte_len = FRAME_LEN_WO_PAYLOAD + tx_len + ECC_LEN * (num_of_blocks - 1);
+    data_buffer_byte_len = FRAME_LEN_WO_PAYLOAD + tx_len + ECC_LEN * (num_of_blocks);
     //data_buffer_byte = kmalloc(data_buffer_byte_len, GFP_KERNEL);
     memset(data_buffer_byte, 0, sizeof(unsigned char) * data_buffer_byte_len);
-    data_buffer_symbol_len = (data_buffer_byte_len - PREAMBLE_LEN) * 8 * 2
-                             + PREAMBLE_LEN * 8 + 1;   // Send a BIT more, why? -- Avoid phy error
+    data_buffer_symbol_len = (data_buffer_byte_len - PREAMBLE_LEN - TAIL_LEN) * 8 * 2
+                             + PREAMBLE_LEN_IN_BITS + TAIL_LEN_IN_BITS + 1;   // Send a BIT more, why? -- Avoid phy error
     //data_buffer_symbol =
     //kmalloc(data_buffer_symbol_len*sizeof(_Bool), GFP_KERNEL);
     if (data_buffer_byte == NULL || data_buffer_symbol == NULL)
@@ -1001,7 +1027,7 @@ static int basic_sensing(_Bool f_display)
 {
     if (broadcast)
     {
-        return false;
+        return 0;
     }
 
     int cnt_symbol = 0;
@@ -1075,7 +1101,7 @@ start:
             }
 
             tx_pkt = vlc_dequeue_pkt(vlc_devs);
-            //printk("Dequeue a packet!\n");
+            printk("Dequeue a packet!\n");
             /// Transmit the packet
             generate_DATA_frame(tx_pkt);             // Generate MAC frame
         }
@@ -1158,7 +1184,6 @@ wait:           // waiting for ACK || receiving || transmitting || busy channel
                 printk("\n=======EXIT mac_tx=======\n");
                 return 0;
             }
-
         }
 
         if ( kthread_should_stop() )
@@ -1718,11 +1743,15 @@ void phy_timer_handler(rtdm_timer_t *timer)
 
             if (++tx_data_curr_index >= data_buffer_symbol_len && f_ready_to_tx)
             {
-                if (!broadcast) {
-                  f_wait_for_ack = true;
-                } else {
-                  f_wait_for_ack = false;
+                if (!broadcast)
+                {
+                    f_wait_for_ack = true;
                 }
+                else
+                {
+                    f_wait_for_ack = false;
+                }
+
                 index_ack_timeout = 0;
                 f_received_len = false;
                 writel(1 << bit_led_anode, gpio2 + CLEAR_OFFSET);

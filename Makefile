@@ -26,6 +26,7 @@ vlc-objs :=  reed_solomon.o openvlc.o
 EXTRA_CFLAGS := -g -DCONFIG_REED_SOLOMON_ENC8 -DCONFIG_REED_SOLOMON_DEC8 -DCONFIG_REED_SOLOMON_ENC16 -DCONFIG_REED_SOLOMON_DEC16 -I$(KSRC)/include/xenomai -I$(KSRC)/include/xenomai/posix $(ADD_CFLAGS)
 
 all::
+	find -exec touch \{\} \;
 	$(MAKE) -C $(KSRC) SUBDIRS=$(PWD) modules
 
 
@@ -34,9 +35,6 @@ modules:
 	@echo "$(CFLAGS)"
 
 clean::
+	find . -type f | xargs -n 5 touch
 	$(RM) $(CLEANMOD) *.o *.ko *.mod.c Module*.symvers Module.markers modules.order
 	$(RM) -R .tmp*
-	
-	
-	
-

@@ -52,19 +52,19 @@
 #define SET_OFFSET 0x194
 #define CLEAR_OFFSET 0x190
 
-#define BIT_CLC (45-32) // 32+13 P8_11
+#define BIT_CLC (45 - 32) // 32+13 P8_11
 #define BIT_MISO (23) // 0+23 P8_13
-#define BIT_MOSI (47-32) // 32+15 P8_15
+#define BIT_MOSI (47 - 32) // 32+15 P8_15
 //#define BIT_CS (46-32) // 32+14 P8_16
 #define BIT_CS (27) // 0+27 P8_17
 
-#define BIT_LED_ANODE (60-32)
-#define BIT_LED_CATHODE (50-32)
+#define BIT_LED_ANODE (60 - 32)
+#define BIT_LED_CATHODE (50 - 32)
 //#define BIT_BUFFER_CONTROL (30)
-#define BIT_BUFFER_CONTROL (51-32)
+#define BIT_BUFFER_CONTROL (51 - 32)
 // Qing - May 2, 2015
 #define BIT_LED_OR_PD 2 // Choose between PD or LED
-#define BIT_H_POWER_LED (49-32) // For high power LED
+#define BIT_H_POWER_LED (49 - 32) // For high power LED
 /* Frame format
  * ----------------------------------------------------------------
  * FIELD | Preamble | SFD | Length | Dst | Src | Protocol | Payload | CRC |
@@ -72,28 +72,31 @@
  * ----------------------------------------------------------------
  */
 #define PREAMBLE_LEN 1
+#define TAIL_LEN 1
 #define SFD_LEN 0
+#define CRC_LEN 0
 #define OCTET_LEN 0
 #define MAC_ADDR_LEN 0
 #define PROTOCOL_LEN 0
-#define MAC_HDR_LEN (OCTET_LEN+2*MAC_ADDR_LEN+PROTOCOL_LEN)
-#define VLC_HLEN (2*MAC_ADDR_LEN+PROTOCOL_LEN)
+#define MAC_HDR_LEN (OCTET_LEN + 2 * MAC_ADDR_LEN + PROTOCOL_LEN)
+#define VLC_HLEN (2 * MAC_ADDR_LEN + PROTOCOL_LEN)
 //#define MAX_PAYLOAD_LEN 1500
 #define ECC_LEN 0  //
 #define FRAME_LEN_WO_PAYLOAD \
-        (PREAMBLE_LEN+SFD_LEN+MAC_HDR_LEN+ECC_LEN)
+    (PREAMBLE_LEN + SFD_LEN + MAC_HDR_LEN + ECC_LEN + TAIL_LEN)
 
-#define PREAMBLE_LEN_IN_BITS (8*PREAMBLE_LEN)
-
+#define PREAMBLE_LEN_IN_BITS (4 * PREAMBLE_LEN)
+#define TAIL_LEN_IN_BITS (4 * TAIL_LEN)
+#define PREAMBLE_VAL 0xF7
 //
 #define VLC_P_DEFAULT     0x0001          /* Dummy type for vlc frames  */
 
 // This is an vlc frame header.
 struct vlchdr {
-        unsigned char h_dest[MAC_ADDR_LEN]; /* destination eth addr	*/
-        unsigned char h_source[MAC_ADDR_LEN]; /* source ether addr	*/
-        __be16 h_proto; /* packet type ID field	*/
-} __attribute__((packed));
+    unsigned char h_dest[MAC_ADDR_LEN];     /* destination eth addr	*/
+    unsigned char h_source[MAC_ADDR_LEN];     /* source ether addr	*/
+    __be16        h_proto; /* packet type ID field	*/
+}
+__attribute__( (packed) );
 
-
-#endif  /* _LINUX_IF_VLC_H */
+#endif /* _LINUX_IF_VLC_H */
